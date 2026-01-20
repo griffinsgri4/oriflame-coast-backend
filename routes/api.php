@@ -39,6 +39,10 @@ Route::get('/products/{id}', [ProductController::class, 'show']);
 // Categories routes (public)
 Route::get('/categories', [CategoryController::class, 'index']);
 
+// Settings routes (public - read-only)
+Route::get('/settings', [SettingsController::class, 'index']);
+Route::get('/settings/{key}', [SettingsController::class, 'getSetting']);
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // Auth routes
@@ -65,7 +69,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/products/{id}', [ProductController::class, 'update']);
         Route::delete('/products/{id}', [ProductController::class, 'destroy']);
 
-        // Settings image upload (branding)
+        // Settings management (admin only)
+        Route::put('/settings', [SettingsController::class, 'update']);
         Route::post('/settings/upload', [SettingsController::class, 'upload']);
         
         // Stock management
@@ -85,17 +90,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users/{id}', [UserController::class, 'show']);
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
-        
+    });
+    
     // Analytics routes
     Route::get('/analytics/dashboard', [AnalyticsController::class, 'dashboard']);
     Route::get('/analytics/sales-summary', [AnalyticsController::class, 'salesSummary']);
     Route::get('/analytics/inventory-summary', [AnalyticsController::class, 'inventorySummary']);
     Route::get('/analytics/customer-insights', [AnalyticsController::class, 'customerInsights']);
     Route::get('/analytics/top-categories', [TopCategoriesController::class, 'index']);
-    
-    // Settings routes
-    Route::get('/settings', [SettingsController::class, 'index']);
-    Route::put('/settings', [SettingsController::class, 'update']);
-    Route::get('/settings/{key}', [SettingsController::class, 'getSetting']);
-});
 });

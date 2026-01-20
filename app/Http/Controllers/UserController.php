@@ -98,7 +98,7 @@ class UserController extends Controller
         }
 
         $user = User::find($id);
-        
+
         if (!$user) {
             return response()->json([
                 'status' => false,
@@ -106,13 +106,28 @@ class UserController extends Controller
             ], 404);
         }
 
+        // Prevent any updates to admin account via API
+        if ($user->role === 'admin') {
+            return response()->json([
+                'status' => false,
+                'message' => 'Admin account updates are locked. Contact backend to change credentials.'
+            ], 403);
+        }
+
+        // Disallow role changes via API to prevent promoting users to admin
+        if ($request->has('role')) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Role cannot be updated via API'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'name' => 'string|max:255',
             'email' => 'email|unique:users,email,' . $id,
             'password' => 'nullable|string|min:8',
             'address' => 'nullable|string',
-            'phone' => 'nullable|string',
-            'role' => 'in:user,admin'
+            'phone' => 'nullable|string'
         ]);
 
         if ($validator->fails()) {
@@ -123,16 +138,8 @@ class UserController extends Controller
             ], 422);
         }
 
-        // Only admin can update role
-        if ($request->has('role') && !$request->user()->isAdmin()) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Unauthorized to update role'
-            ], 403);
-        }
-
         $data = $request->except(['password']);
-        
+
         // Update password if provided
         if ($request->has('password')) {
             $data['password'] = Hash::make($request->password);
@@ -213,6 +220,14 @@ class UserController extends Controller
     {
         $user = $request->user();
 
+        // Block admin from changing email or password via API
+        if ($user->role === 'admin' && ($request->has('email') || $request->has('password'))) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Admin credentials are locked. Contact backend to change email or password.'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'name' => 'string|max:255',
             'email' => 'email|unique:users,email,' . $user->id,
@@ -230,8 +245,8 @@ class UserController extends Controller
         }
 
         $data = $request->except(['password', 'role']);
-        
-        // Update password if provided
+
+        // Update password if provided (non-admin only)
         if ($request->has('password')) {
             $data['password'] = Hash::make($request->password);
         }

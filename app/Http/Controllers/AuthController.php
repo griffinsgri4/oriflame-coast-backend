@@ -88,7 +88,7 @@ class AuthController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'User logged in successfully',
+            'message' => ($user->role === 'admin') ? 'Admin logged in successfully' : 'User logged in successfully',
             'data' => [
                 'user' => $user,
                 'token' => $token
