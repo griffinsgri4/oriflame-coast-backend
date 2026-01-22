@@ -32,9 +32,16 @@ RUN composer install --no-interaction --optimize-autoloader --no-dev
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Configure Apache DocumentRoot to point to public folder
-ENV APACHE_DOCUMENT_ROOT /var/www/html/public
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
-RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+RUN sed -ri -e 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/*.conf
+
+# Allow .htaccess overrides for Laravel routing
+RUN printf '%s\n' \
+    '<Directory /var/www/html/public>' \
+    '    AllowOverride All' \
+    '    Require all granted' \
+    '</Directory>' \
+    > /etc/apache2/conf-available/laravel.conf \
+    && a2enconf laravel
 
 # Expose port 80
 EXPOSE 80
