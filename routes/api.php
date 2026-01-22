@@ -2,6 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Throwable;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\StockController;
@@ -16,6 +18,22 @@ use App\Http\Controllers\TopCategoriesController;
 Route::get('/test', function () {
     return response()->json(['message' => 'API is working']);
 });
+
+Route::get('/health/db', function () {
+    try {
+        DB::connection()->select('select 1');
+
+        return response()->json([
+            'ok' => true,
+        ]);
+    } catch (Throwable $e) {
+        report($e);
+
+        return response()->json([
+            'ok' => false,
+        ], 503);
+    }
+})->middleware('throttle:20,1');
 
 /*
 |--------------------------------------------------------------------------

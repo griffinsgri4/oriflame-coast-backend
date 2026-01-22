@@ -4,8 +4,9 @@ set -e
 # Run migrations
 php artisan migrate --force
 
-# Run seeders (optional, but good for initial setup)
-# php artisan db:seed --force
+if [ "${RUN_SEEDERS_ON_BOOT}" = "true" ]; then
+  php artisan db:seed --force
+fi
 
 # Start Apache
 apache2-foreground

@@ -15,17 +15,22 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
-        // Clear existing users and tokens
-        DB::table('personal_access_tokens')->delete();
-        DB::table('users')->delete();
+        $adminEmail = env('ADMIN_EMAIL', 'admin@example.com');
+        $adminPassword = env('ADMIN_PASSWORD', null);
+        $adminName = env('ADMIN_NAME', 'Site Administrator');
 
-        // Create single stable admin account
-        User::create([
-            'name' => 'Site Administrator',
-            'email' => 'griffinsgri4@gmail.com',
-            'password' => Hash::make('admin123@.'),
-            'role' => 'admin',
-            'email_verified_at' => now(),
-        ]);
+        if (!$adminPassword) {
+            $adminPassword = bin2hex(random_bytes(12));
+        }
+
+        User::updateOrCreate(
+            ['email' => $adminEmail],
+            [
+                'name' => $adminName,
+                'password' => Hash::make($adminPassword),
+                'role' => 'admin',
+                'email_verified_at' => now(),
+            ]
+        );
     }
 }
