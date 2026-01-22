@@ -85,6 +85,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/products', [ProductController::class, 'store']);
         Route::put('/products/{id}', [ProductController::class, 'update']);
         Route::delete('/products/{id}', [ProductController::class, 'destroy']);
+        Route::post('/products/{id}/images', [ProductController::class, 'uploadImages']);
+        Route::delete('/products/{id}/images', [ProductController::class, 'deleteImage']);
 
         // Settings management (admin only)
         Route::put('/settings', [SettingsController::class, 'update']);

@@ -6,6 +6,8 @@ use App\Models\Product;
 use App\Models\Stock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ProductController extends Controller
 {
@@ -251,6 +253,85 @@ class ProductController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Product deleted successfully'
+        ], 200);
+    }
+
+    public function uploadImages(Request $request, $id)
+    {
+        $product = Product::find($id);
+        if (!$product) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Product not found'
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'images' => 'required',
+            'images.*' => 'file|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        $files = $request->file('images');
+        if (!$files) {
+            $single = $request->file('image');
+            $files = $single ? [$single] : [];
+        }
+
+        $urls = [];
+        $paths = [];
+
+        foreach ($files as $file) {
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                $ext = 'jpg';
+            }
+
+            $filename = Str::uuid()->toString() . '.' . $ext;
+            $path = $file->storeAs('products/' . $product->id, $filename, 'public');
+            $paths[] = $path;
+            $urls[] = asset('storage/' . $path);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Images uploaded successfully',
+            'data' => [
+                'urls' => $urls,
+                'paths' => $paths,
+            ]
+        ], 200);
+    }
+
+    public function deleteImage(Request $request, $id)
+    {
+        $product = Product::find($id);
+        if (!$product) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Product not found'
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'url' => 'required|string',
+        ]);
+
+        $url = (string) $validated['url'];
+        $prefix = asset('storage/products/' . $product->id . '/');
+
+        if (strpos($url, $prefix) !== 0) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Invalid image url'
+            ], 422);
+        }
+
+        $relative = 'products/' . $product->id . '/' . ltrim(substr($url, strlen($prefix)), '/');
+        $deleted = Storage::disk('public')->delete($relative);
+
+        return response()->json([
+            'status' => true,
+            'message' => $deleted ? 'Image deleted' : 'Image not found'
         ], 200);
     }
 }
