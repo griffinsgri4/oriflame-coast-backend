@@ -19,11 +19,15 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        env('FRONTEND_URL', 'https://yourdomain.com'),
-    ],
+    'allowed_origins' => array_values(array_filter(array_map(
+        static fn ($origin) => trim($origin),
+        explode(',', (string) env('FRONTEND_URLS', env('FRONTEND_URL', 'https://yourdomain.com')))
+    ))),
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => array_values(array_filter(array_map(
+        static fn ($pattern) => trim($pattern),
+        explode(',', (string) env('FRONTEND_URL_PATTERNS', ''))
+    ))),
 
     'allowed_headers' => ['*'],
 
