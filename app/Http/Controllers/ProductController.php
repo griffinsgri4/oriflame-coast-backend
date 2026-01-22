@@ -38,17 +38,14 @@ class ProductController extends Controller
         
         // Enhanced search functionality
         if ($request->has('search')) {
-            $searchTerm = $request->search;
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('name', 'like', '%' . $searchTerm . '%')
-                  ->orWhere('sku', 'like', '%' . $searchTerm . '%')
-                  ->orWhere('description', 'like', '%' . $searchTerm . '%')
-                  ->orWhereJsonContains('attributes', $searchTerm)
-                  ->orWhere(function ($subQuery) use ($searchTerm) {
-                      // Search within JSON attributes values
-                      $subQuery->whereRaw("JSON_SEARCH(attributes, 'one', ?) IS NOT NULL", ['%' . $searchTerm . '%']);
-                  });
-            });
+            $searchTerm = trim((string) $request->search);
+            if ($searchTerm !== '') {
+                $query->where(function ($q) use ($searchTerm) {
+                    $q->where('name', 'like', '%' . $searchTerm . '%')
+                      ->orWhere('sku', 'like', '%' . $searchTerm . '%')
+                      ->orWhere('description', 'like', '%' . $searchTerm . '%');
+                });
+            }
         }
         
         // Search by specific SKU
