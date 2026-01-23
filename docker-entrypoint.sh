@@ -2,6 +2,7 @@
 set -e
 
 # Run migrations
+php artisan storage:link || true
 php artisan migrate --force
 
 if [ "${RUN_SEEDERS_ON_BOOT}" = "true" ]; then

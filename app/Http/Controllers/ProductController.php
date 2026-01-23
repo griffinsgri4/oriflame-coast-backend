@@ -289,7 +289,7 @@ class ProductController extends Controller
             $filename = Str::uuid()->toString() . '.' . $ext;
             $path = $file->storeAs('products/' . $product->id, $filename, 'public');
             $paths[] = $path;
-            $urls[] = asset('storage/' . $path);
+            $urls[] = '/storage/' . $path;
         }
 
         return response()->json([
@@ -317,16 +317,29 @@ class ProductController extends Controller
         ]);
 
         $url = (string) $validated['url'];
-        $prefix = asset('storage/products/' . $product->id . '/');
 
-        if (strpos($url, $prefix) !== 0) {
+        $path = $url;
+        if (preg_match('#^https?://#i', $path)) {
+            $parsed = parse_url($path);
+            $path = $parsed['path'] ?? '';
+        }
+
+        if (!is_string($path) || $path === '') {
             return response()->json([
                 'status' => false,
                 'message' => 'Invalid image url'
             ], 422);
         }
 
-        $relative = 'products/' . $product->id . '/' . ltrim(substr($url, strlen($prefix)), '/');
+        $expectedPrefix = '/storage/products/' . $product->id . '/';
+        if (strpos($path, $expectedPrefix) !== 0) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Invalid image url'
+            ], 422);
+        }
+
+        $relative = 'products/' . $product->id . '/' . ltrim(substr($path, strlen($expectedPrefix)), '/');
         $deleted = Storage::disk('public')->delete($relative);
 
         return response()->json([
