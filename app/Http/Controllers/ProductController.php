@@ -11,6 +11,80 @@ use Illuminate\Support\Str;
 
 class ProductController extends Controller
 {
+    private function buildPublicImageUrl(int $productId, string $filename): string
+    {
+        return url('/api/products/' . $productId . '/images/' . $filename);
+    }
+
+    private function normalizeImageValue($value, int $productId): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $v = trim($value);
+        if ($v === '') {
+            return null;
+        }
+
+        if (preg_match('#^https?://#i', $v)) {
+            $parsed = parse_url($v);
+            $path = $parsed['path'] ?? '';
+            if (is_string($path) && $path !== '') {
+                $v = $path;
+            }
+        }
+
+        $apiPrefix = '/api/products/' . $productId . '/images/';
+        if (strpos($v, $apiPrefix) === 0) {
+            $filename = ltrim(substr($v, strlen($apiPrefix)), '/');
+            if ($filename !== '' && strpos($filename, '/') === false) {
+                return $this->buildPublicImageUrl($productId, $filename);
+            }
+        }
+
+        $storagePrefix = '/storage/products/' . $productId . '/';
+        if (strpos($v, $storagePrefix) === 0) {
+            $filename = ltrim(substr($v, strlen($storagePrefix)), '/');
+            if ($filename !== '' && strpos($filename, '/') === false) {
+                return $this->buildPublicImageUrl($productId, $filename);
+            }
+        }
+
+        $relativePrefix = 'products/' . $productId . '/';
+        if (strpos($v, $relativePrefix) === 0) {
+            $filename = ltrim(substr($v, strlen($relativePrefix)), '/');
+            if ($filename !== '' && strpos($filename, '/') === false) {
+                return $this->buildPublicImageUrl($productId, $filename);
+            }
+        }
+
+        return $value;
+    }
+
+    private function normalizeProductMedia($product)
+    {
+        if (!$product || !isset($product->id)) {
+            return $product;
+        }
+
+        $productId = (int) $product->id;
+        $product->image = $this->normalizeImageValue($product->image ?? null, $productId);
+
+        $gallery = $product->gallery ?? null;
+        if (is_array($gallery)) {
+            $product->gallery = array_values(array_filter(array_map(function ($item) use ($productId) {
+                return $this->normalizeImageValue($item, $productId);
+            }, $gallery)));
+        } elseif (is_string($gallery) && trim($gallery) !== '') {
+            $product->gallery = array_values(array_filter([
+                $this->normalizeImageValue($gallery, $productId),
+            ]));
+        }
+
+        return $product;
+    }
+
     /**
      * Display a listing of the products.
      *
@@ -66,6 +140,10 @@ class ProductController extends Controller
         $query->orderBy($sortField, $sortOrder);
         
         $products = $query->paginate($request->per_page ?? 10);
+
+        $products->getCollection()->transform(function ($p) {
+            return $this->normalizeProductMedia($p);
+        });
         
         return response()->json([
             'status' => true,
@@ -171,7 +249,7 @@ class ProductController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Product retrieved successfully',
-            'data' => $product
+            'data' => $this->normalizeProductMedia($product)
         ], 200);
     }
 
@@ -289,7 +367,7 @@ class ProductController extends Controller
             $filename = Str::uuid()->toString() . '.' . $ext;
             $path = $file->storeAs('products/' . $product->id, $filename, 'public');
             $paths[] = $path;
-            $urls[] = '/storage/' . $path;
+            $urls[] = $this->buildPublicImageUrl((int) $product->id, $filename);
         }
 
         return response()->json([
@@ -331,20 +409,69 @@ class ProductController extends Controller
             ], 422);
         }
 
-        $expectedPrefix = '/storage/products/' . $product->id . '/';
-        if (strpos($path, $expectedPrefix) !== 0) {
+        $relative = null;
+
+        $apiPrefix = '/api/products/' . $product->id . '/images/';
+        if (strpos($path, $apiPrefix) === 0) {
+            $filename = ltrim(substr($path, strlen($apiPrefix)), '/');
+            if ($filename !== '' && strpos($filename, '/') === false) {
+                $relative = 'products/' . $product->id . '/' . $filename;
+            }
+        }
+
+        $storagePrefix = '/storage/products/' . $product->id . '/';
+        if ($relative === null && strpos($path, $storagePrefix) === 0) {
+            $filename = ltrim(substr($path, strlen($storagePrefix)), '/');
+            if ($filename !== '' && strpos($filename, '/') === false) {
+                $relative = 'products/' . $product->id . '/' . $filename;
+            }
+        }
+
+        if ($relative === null) {
             return response()->json([
                 'status' => false,
                 'message' => 'Invalid image url'
             ], 422);
         }
 
-        $relative = 'products/' . $product->id . '/' . ltrim(substr($path, strlen($expectedPrefix)), '/');
         $deleted = Storage::disk('public')->delete($relative);
 
         return response()->json([
             'status' => true,
             'message' => $deleted ? 'Image deleted' : 'Image not found'
         ], 200);
+    }
+
+    /**
+     * Serve a product image file directly
+     *
+     * @param  int  $id
+     * @param  string  $filename
+     * @return \Illuminate\Http\Response
+     */
+    public function serveImage($id, $filename)
+    {
+        $product = Product::find($id);
+        if (!$product) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Product not found'
+            ], 404);
+        }
+
+        $path = 'products/' . $product->id . '/' . $filename;
+        $fullPath = storage_path('app/public/' . $path);
+
+        if (!file_exists($fullPath)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Image not found'
+            ], 404);
+        }
+
+        return response()->file($fullPath, [
+            'Content-Type' => mime_content_type($fullPath),
+            'Cache-Control' => 'public, max-age=31536000',
+        ]);
     }
 }
