@@ -13,6 +13,7 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\TopCategoriesController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\MpesaController;
 
 // Test route
 Route::get('/test', function () {
@@ -78,6 +79,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-orders', [OrderController::class, 'myOrders']);
     Route::get('/my-orders/{id}', [OrderController::class, 'myOrder']);
     Route::post('/orders', [OrderController::class, 'store']);
+
+    Route::post('/payments/mpesa/stk-push', [MpesaController::class, 'stkPush']);
+    Route::get('/payments/mpesa/orders/{orderId}', [MpesaController::class, 'latestForOrder']);
     
     // Admin routes
     Route::middleware('admin')->group(function () {
@@ -123,3 +127,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/analytics/customer-insights', [AnalyticsController::class, 'customerInsights']);
     Route::get('/analytics/top-categories', [TopCategoriesController::class, 'index']);
 });
+
+Route::post('/payments/mpesa/callback', [MpesaController::class, 'callback']);
