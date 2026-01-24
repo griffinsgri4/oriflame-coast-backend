@@ -6,10 +6,66 @@ use Illuminate\Http\Request;
 use App\Models\Setting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class SettingsController extends Controller
 {
+    private function uploadsDisk(): string
+    {
+        return (string) (config('filesystems.uploads_disk') ?: 'public');
+    }
+
+    private function mediaUrl(string $path): string
+    {
+        return url('/api/media/' . ltrim($path, '/'));
+    }
+
+    private function normalizeMediaValue($value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $v = trim($value);
+        if ($v === '') {
+            return null;
+        }
+
+        if (preg_match('#^https?://#i', $v)) {
+            $parsed = parse_url($v);
+            $path = $parsed['path'] ?? '';
+            if (is_string($path) && $path !== '' && strpos($path, '/storage/') === 0) {
+                $relative = ltrim(substr($path, strlen('/storage/')), '/');
+                return $this->mediaUrl($relative);
+            }
+            return $v;
+        }
+
+        if (strpos($v, '/storage/') === 0) {
+            $relative = ltrim(substr($v, strlen('/storage/')), '/');
+            return $this->mediaUrl($relative);
+        }
+
+        if ($v[0] === '/') {
+            $v = ltrim($v, '/');
+        }
+
+        return $this->mediaUrl($v);
+    }
+
+    private function stripCategoryPrefix(array $settings, string $category): array
+    {
+        $out = [];
+        $prefix = $category . '.';
+        foreach ($settings as $key => $value) {
+            if (is_string($key) && strpos($key, $prefix) === 0) {
+                $out[substr($key, strlen($prefix))] = $value;
+            } else {
+                $out[$key] = $value;
+            }
+        }
+        return $out;
+    }
+
     /**
      * Get all settings grouped by category
      */
@@ -17,10 +73,10 @@ class SettingsController extends Controller
     {
         try {
             $settings = [
-                'general' => Setting::getByCategory('general'),
-                'notification' => Setting::getByCategory('notification'),
-                'security' => Setting::getByCategory('security'),
-                'email' => Setting::getByCategory('email'),
+                'general' => $this->stripCategoryPrefix(Setting::getByCategory('general')->toArray(), 'general'),
+                'notification' => $this->stripCategoryPrefix(Setting::getByCategory('notification')->toArray(), 'notification'),
+                'security' => $this->stripCategoryPrefix(Setting::getByCategory('security')->toArray(), 'security'),
+                'email' => $this->stripCategoryPrefix(Setting::getByCategory('email')->toArray(), 'email'),
             ];
 
             // Provide default values if settings don't exist
@@ -58,16 +114,25 @@ class SettingsController extends Controller
 
             // Merge with defaults
             foreach ($defaultSettings as $category => $defaults) {
-                $settings[$category] = array_merge($defaults, $settings[$category]->toArray());
+                $settings[$category] = array_merge($defaults, $settings[$category]);
+            }
+
+            if (isset($settings['general']['site_logo_url'])) {
+                $settings['general']['site_logo_url'] = $this->normalizeMediaValue($settings['general']['site_logo_url']);
+            }
+            if (isset($settings['general']['hero_banner_url'])) {
+                $settings['general']['hero_banner_url'] = $this->normalizeMediaValue($settings['general']['hero_banner_url']);
             }
 
             return response()->json([
                 'success' => true,
+                'status' => true,
                 'data' => $settings
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
+                'status' => false,
                 'message' => 'Failed to fetch settings',
                 'error' => $e->getMessage()
             ], 500);
@@ -101,11 +166,13 @@ class SettingsController extends Controller
 
             return response()->json([
                 'success' => true,
+                'status' => true,
                 'message' => 'Settings updated successfully'
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
+                'status' => false,
                 'message' => 'Failed to update settings',
                 'error' => $e->getMessage()
             ], 500);
@@ -131,6 +198,7 @@ class SettingsController extends Controller
             if (!in_array($key, $allowedKeys, true)) {
                 return response()->json([
                     'success' => false,
+                    'status' => false,
                     'message' => 'Invalid key for image upload',
                 ], 422);
             }
@@ -140,15 +208,15 @@ class SettingsController extends Controller
             $ext = $file->getClientOriginalExtension();
             $filename = $baseName . '-' . time() . '.' . $ext;
 
-            // Store in public disk under branding
-            $path = $file->storeAs('branding', $filename, 'public');
-            $url = asset('storage/' . $path);
+            $path = $file->storeAs('branding', $filename, $this->uploadsDisk());
+            $url = $this->mediaUrl($path);
 
             // Persist setting
-            Setting::setValue($key, $url, 'string', 'general', $this->getSettingDescription($key));
+            Setting::setValue($key, $path, 'string', 'general', $this->getSettingDescription($key));
 
             return response()->json([
                 'success' => true,
+                'status' => true,
                 'message' => 'Image uploaded successfully',
                 'data' => [
                     'key' => $key,
@@ -158,6 +226,7 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
+                'status' => false,
                 'message' => 'Failed to upload image',
                 'error' => $e->getMessage(),
             ], 500);
@@ -174,6 +243,7 @@ class SettingsController extends Controller
             
             return response()->json([
                 'success' => true,
+                'status' => true,
                 'data' => [
                     'key' => $key,
                     'value' => $value
@@ -182,6 +252,7 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
+                'status' => false,
                 'message' => 'Failed to fetch setting',
                 'error' => $e->getMessage()
             ], 500);

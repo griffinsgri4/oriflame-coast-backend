@@ -11,6 +11,11 @@ use Illuminate\Support\Str;
 
 class ProductController extends Controller
 {
+    private function uploadsDisk(): string
+    {
+        return (string) (config('filesystems.uploads_disk') ?: 'public');
+    }
+
     private function buildPublicImageUrl(int $productId, string $filename): string
     {
         return url('/api/products/' . $productId . '/images/' . $filename);
@@ -223,7 +228,7 @@ class ProductController extends Controller
             'status' => true,
             'message' => 'Product created successfully',
             'data' => [
-                'product' => $product,
+                'product' => $this->normalizeProductMedia($product),
                 'stock' => $stock
             ]
         ], 201);
@@ -305,7 +310,7 @@ class ProductController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Product updated successfully',
-            'data' => $product
+            'data' => $this->normalizeProductMedia($product)
         ], 200);
     }
 
@@ -357,6 +362,7 @@ class ProductController extends Controller
 
         $urls = [];
         $paths = [];
+        $disk = $this->uploadsDisk();
 
         foreach ($files as $file) {
             $ext = strtolower($file->getClientOriginalExtension() ?: 'jpg');
@@ -365,7 +371,7 @@ class ProductController extends Controller
             }
 
             $filename = Str::uuid()->toString() . '.' . $ext;
-            $path = $file->storeAs('products/' . $product->id, $filename, 'public');
+            $path = $file->storeAs('products/' . $product->id, $filename, $disk);
             $paths[] = $path;
             $urls[] = $this->buildPublicImageUrl((int) $product->id, $filename);
         }
@@ -434,7 +440,7 @@ class ProductController extends Controller
             ], 422);
         }
 
-        $deleted = Storage::disk('public')->delete($relative);
+        $deleted = Storage::disk($this->uploadsDisk())->delete($relative);
 
         return response()->json([
             'status' => true,
@@ -459,19 +465,60 @@ class ProductController extends Controller
             ], 404);
         }
 
+        $disk = $this->uploadsDisk();
         $path = 'products/' . $product->id . '/' . $filename;
-        $fullPath = storage_path('app/public/' . $path);
+        $fs = Storage::disk($disk);
 
-        if (!file_exists($fullPath)) {
+        if (!$fs->exists($path)) {
             return response()->json([
                 'status' => false,
                 'message' => 'Image not found'
             ], 404);
         }
 
-        return response()->file($fullPath, [
-            'Content-Type' => mime_content_type($fullPath),
-            'Cache-Control' => 'public, max-age=31536000',
+        $mime = $fs->mimeType($path) ?: 'application/octet-stream';
+        $driver = (string) (config('filesystems.disks.' . $disk . '.driver') ?: '');
+        if ($driver === 'local') {
+            return response()->file($fs->path($path), [
+                'Content-Type' => $mime,
+                'Cache-Control' => 'public, max-age=31536000, immutable',
+            ]);
+        }
+
+        if (method_exists($fs, 'temporaryUrl')) {
+            try {
+                $tmp = $fs->temporaryUrl($path, now()->addMinutes(10));
+                return redirect()->away($tmp);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        if (method_exists($fs, 'url')) {
+            try {
+                $url = $fs->url($path);
+                if (is_string($url) && preg_match('#^https?://#i', $url)) {
+                    return redirect()->away($url);
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        $stream = $fs->readStream($path);
+        if (!is_resource($stream)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to read image'
+            ], 500);
+        }
+
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, 200, [
+            'Content-Type' => $mime,
+            'Cache-Control' => 'public, max-age=31536000, immutable',
         ]);
     }
 }

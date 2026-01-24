@@ -12,6 +12,7 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\TopCategoriesController;
+use App\Http\Controllers\MediaController;
 
 // Test route
 Route::get('/test', function () {
@@ -53,6 +54,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::get('/products/{id}/images/{filename}', [ProductController::class, 'serveImage']);
+Route::get('/media/{path}', [MediaController::class, 'serve'])->where('path', '.*');
 
 // Categories routes (public)
 Route::get('/categories', [CategoryController::class, 'index']);

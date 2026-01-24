@@ -11,6 +11,48 @@ use Carbon\Carbon;
 
 class CategoryController extends Controller
 {
+    private function uploadsDisk(): string
+    {
+        return (string) (config('filesystems.uploads_disk') ?: 'public');
+    }
+
+    private function mediaUrl(string $path): string
+    {
+        return url('/api/media/' . ltrim($path, '/'));
+    }
+
+    private function normalizeMediaValue($value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $v = trim($value);
+        if ($v === '') {
+            return null;
+        }
+
+        if (preg_match('#^https?://#i', $v)) {
+            $parsed = parse_url($v);
+            $path = $parsed['path'] ?? '';
+            if (is_string($path) && $path !== '' && strpos($path, '/storage/') === 0) {
+                $relative = ltrim(substr($path, strlen('/storage/')), '/');
+                return $this->mediaUrl($relative);
+            }
+            return $v;
+        }
+
+        if (strpos($v, '/storage/') === 0) {
+            $relative = ltrim(substr($v, strlen('/storage/')), '/');
+            return $this->mediaUrl($relative);
+        }
+
+        if ($v[0] === '/') {
+            $v = ltrim($v, '/');
+        }
+
+        return $this->mediaUrl($v);
+    }
     /**
      * GET /api/categories
      * Returns categories with product_count and sales_count aggregated.
@@ -98,6 +140,13 @@ class CategoryController extends Controller
             return response()->json(['data' => array_values($derived)]);
         }
 
+        $categories = $categories->map(function ($c) {
+            if (isset($c->thumbnail_url)) {
+                $c->thumbnail_url = $this->normalizeMediaValue($c->thumbnail_url);
+            }
+            return $c;
+        });
+
         // Add simple caching headers
         $etag = sha1(json_encode($categories));
         return response()->json(['data' => $categories])
@@ -123,6 +172,9 @@ class CategoryController extends Controller
 
         $category = Category::create($data);
         $this->forgetCategoryCaches();
+        if ($category->thumbnail_url) {
+            $category->thumbnail_url = $this->normalizeMediaValue($category->thumbnail_url);
+        }
         return response()->json(['data' => $category], 201);
     }
 
@@ -143,6 +195,9 @@ class CategoryController extends Controller
 
         $category->update($data);
         $this->forgetCategoryCaches();
+        if ($category->thumbnail_url) {
+            $category->thumbnail_url = $this->normalizeMediaValue($category->thumbnail_url);
+        }
         return response()->json(['data' => $category]);
     }
 
@@ -165,14 +220,12 @@ class CategoryController extends Controller
         $ext = $file->getClientOriginalExtension();
         $filename = $slug . '-' . time() . '.' . $ext;
 
-        // Store in public disk under categories
-        $path = $file->storeAs('categories', $filename, 'public');
-        $url = asset('storage/' . $path);
-
-        $category->thumbnail_url = $url;
+        $path = $file->storeAs('categories', $filename, $this->uploadsDisk());
+        $category->thumbnail_url = $path;
         $category->save();
         $this->forgetCategoryCaches();
 
+        $category->thumbnail_url = $this->mediaUrl($path);
         return response()->json(['data' => $category]);
     }
 
