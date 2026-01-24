@@ -37,6 +37,7 @@ RUN sed -ri -e 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-avail
 # Allow .htaccess overrides for Laravel routing
 RUN printf '%s\n' \
     '<Directory /var/www/html/public>' \
+    '    Options FollowSymLinks' \
     '    AllowOverride All' \
     '    Require all granted' \
     '</Directory>' \
