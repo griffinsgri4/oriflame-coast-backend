@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\Stock;
 use Illuminate\Http\Request;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -144,11 +145,13 @@ class ProductController extends Controller
         $sortOrder = $request->sort_order ?? 'desc';
         $query->orderBy($sortField, $sortOrder);
         
+        /** @var \Illuminate\Pagination\LengthAwarePaginator $products */
         $products = $query->paginate($request->per_page ?? 10);
-
-        $products->getCollection()->transform(function ($p) {
-            return $this->normalizeProductMedia($p);
-        });
+        $products->setCollection(
+            $products->getCollection()->map(function ($p) {
+                return $this->normalizeProductMedia($p);
+            })
+        );
         
         return response()->json([
             'status' => true,
@@ -349,7 +352,7 @@ class ProductController extends Controller
             ], 404);
         }
 
-        $validated = $request->validate([
+        $request->validate([
             'images' => 'required',
             'images.*' => 'file|mimes:jpg,jpeg,png,webp|max:5120',
         ]);
@@ -467,6 +470,7 @@ class ProductController extends Controller
 
         $disk = $this->uploadsDisk();
         $path = 'products/' . $product->id . '/' . $filename;
+        /** @var FilesystemAdapter $fs */
         $fs = Storage::disk($disk);
 
         if (!$fs->exists($path)) {
@@ -489,7 +493,7 @@ class ProductController extends Controller
             try {
                 $tmp = $fs->temporaryUrl($path, now()->addMinutes(10));
                 return redirect()->away($tmp);
-            } catch (\Throwable $e) {
+            } catch (\Throwable) {
             }
         }
 
@@ -499,7 +503,7 @@ class ProductController extends Controller
                 if (is_string($url) && preg_match('#^https?://#i', $url)) {
                     return redirect()->away($url);
                 }
-            } catch (\Throwable $e) {
+            } catch (\Throwable) {
             }
         }
 

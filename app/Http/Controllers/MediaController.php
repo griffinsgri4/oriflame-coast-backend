@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 
 class MediaController extends Controller
@@ -43,6 +44,7 @@ class MediaController extends Controller
         }
 
         $disk = $this->uploadsDisk();
+        /** @var FilesystemAdapter $fs */
         $fs = Storage::disk($disk);
 
         if (!$fs->exists($decoded)) {
@@ -71,7 +73,7 @@ class MediaController extends Controller
             try {
                 $tmp = $fs->temporaryUrl($decoded, now()->addMinutes(10));
                 return redirect()->away($tmp);
-            } catch (\Throwable $e) {
+            } catch (\Throwable) {
             }
         }
 
@@ -81,7 +83,7 @@ class MediaController extends Controller
                 if (is_string($url) && preg_match('#^https?://#i', $url)) {
                     return redirect()->away($url);
                 }
-            } catch (\Throwable $e) {
+            } catch (\Throwable) {
             }
         }
 
@@ -104,4 +106,3 @@ class MediaController extends Controller
         ]);
     }
 }
-
