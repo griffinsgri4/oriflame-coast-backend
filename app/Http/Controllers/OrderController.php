@@ -62,13 +62,20 @@ class OrderController extends Controller
      */
     public function store(Request $request)
     {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
-            'shipping_address' => 'required|string',
+            'shipping_address' => 'required',
             'payment_method' => 'required|string',
-            'items' => 'required|array',
+            'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
-            'items.*.quantity' => 'required|integer|min:1'
+            'items.*.quantity' => 'required|integer|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -119,14 +126,22 @@ class OrderController extends Controller
         DB::beginTransaction();
         
         try {
+            $shippingAddress = $request->shipping_address;
+            if (is_array($shippingAddress)) {
+                $shippingAddress = json_encode($shippingAddress);
+            }
+            if (!is_string($shippingAddress)) {
+                $shippingAddress = '';
+            }
+
             // Create order
             $order = Order::create([
-                'user_id' => $request->user_id,
+                'user_id' => $user->id,
                 'total' => $total,
                 'status' => 'pending',
-                'shipping_address' => $request->shipping_address,
+                'shipping_address' => $shippingAddress,
                 'payment_method' => $request->payment_method,
-                'payment_status' => 'pending',
+                'payment_status' => 'unpaid',
                 'tracking_number' => 'TRK' . strtoupper(substr(md5(uniqid()), 0, 10))
             ]);
             
@@ -208,7 +223,7 @@ class OrderController extends Controller
 
         $validator = Validator::make($request->all(), [
             'status' => 'required|in:pending,processing,shipped,delivered,cancelled',
-            'payment_status' => 'in:pending,paid,failed,refunded'
+            'payment_status' => 'in:paid,unpaid'
         ]);
 
         if ($validator->fails()) {
@@ -295,6 +310,35 @@ class OrderController extends Controller
             'status' => true,
             'message' => 'User orders retrieved successfully',
             'data' => $orders
+        ], 200);
+    }
+
+    /**
+     * Get a specific order for the authenticated user.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function myOrder(Request $request, $id)
+    {
+        $user = $request->user();
+
+        $order = Order::with(['orderItems.product'])
+            ->where('user_id', $user->id)
+            ->find($id);
+
+        if (!$order) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Order not found'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Order retrieved successfully',
+            'data' => $order
         ], 200);
     }
 }

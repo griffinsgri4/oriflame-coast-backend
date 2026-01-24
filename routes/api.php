@@ -74,6 +74,8 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // User orders
     Route::get('/my-orders', [OrderController::class, 'myOrders']);
+    Route::get('/my-orders/{id}', [OrderController::class, 'myOrder']);
+    Route::post('/orders', [OrderController::class, 'store']);
     
     // Admin routes
     Route::middleware('admin')->group(function () {
@@ -102,9 +104,8 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Order management
         Route::get('/orders', [OrderController::class, 'index']);
-        Route::post('/orders', [OrderController::class, 'store']);
         Route::get('/orders/{id}', [OrderController::class, 'show']);
-        Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
+        Route::match(['put', 'patch'], '/orders/{id}/status', [OrderController::class, 'updateStatus']);
         
         // User management
         Route::get('/users', [UserController::class, 'index']);

@@ -31,6 +31,7 @@ class Order extends Model
      */
     protected $casts = [
         'total' => 'decimal:2',
+        'shipping_address' => 'array',
     ];
 
     /**
@@ -45,6 +46,11 @@ class Order extends Model
      * Get the items for the order.
      */
     public function items()
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function orderItems()
     {
         return $this->hasMany(OrderItem::class);
     }
