@@ -127,6 +127,17 @@ class MpesaController extends Controller
 
     public function callback(Request $request)
     {
+        $secret = (string) (config('mpesa.callback_secret') ?? '');
+        if ($secret !== '') {
+            $provided = (string) ($request->query('secret') ?? $request->header('X-MPESA-SECRET') ?? '');
+            if (!hash_equals($secret, $provided)) {
+                return response()->json([
+                    'ResultCode' => 1,
+                    'ResultDesc' => 'Forbidden',
+                ], 403);
+            }
+        }
+
         $payload = $request->all();
         $stk = $payload['Body']['stkCallback'] ?? null;
 
@@ -148,17 +159,27 @@ class MpesaController extends Controller
         }
 
         $receipt = null;
+        $amountPaid = null;
         $items = is_array($stk) ? ($stk['CallbackMetadata']['Item'] ?? []) : [];
         if (is_array($items)) {
             foreach ($items as $it) {
                 if (is_array($it) && ($it['Name'] ?? '') === 'MpesaReceiptNumber') {
                     $receipt = (string) ($it['Value'] ?? '');
                 }
+                if (is_array($it) && ($it['Name'] ?? '') === 'Amount') {
+                    $amountPaid = is_numeric($it['Value'] ?? null) ? (float) $it['Value'] : null;
+                }
             }
         }
 
         $codeInt = is_numeric($resultCode) ? (int) $resultCode : null;
         $status = $codeInt === 0 ? 'success' : 'failed';
+
+        if ($codeInt === 0 && (!$receipt || $amountPaid === null)) {
+            $codeInt = 1;
+            $status = 'failed';
+            $resultDesc = 'Missing receipt or amount';
+        }
 
         $txn->update([
             'status' => $status,
@@ -170,7 +191,17 @@ class MpesaController extends Controller
 
         if ($codeInt === 0) {
             $order = Order::find($txn->order_id);
-            if ($order && $order->payment_status !== 'paid') {
+            if ($order && $order->payment_status !== 'paid' && $order->payment_method === 'mpesa') {
+                $expected = (float) $order->total;
+                if ($amountPaid === null || abs($expected - (float) $amountPaid) > 0.01) {
+                    $txn->update([
+                        'status' => 'failed',
+                        'result_code' => 1,
+                        'result_desc' => 'Amount mismatch',
+                    ]);
+                    return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Accepted'], 200);
+                }
+
                 $order->payment_status = 'paid';
                 $order->save();
             }
@@ -179,4 +210,3 @@ class MpesaController extends Controller
         return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Accepted'], 200);
     }
 }
-

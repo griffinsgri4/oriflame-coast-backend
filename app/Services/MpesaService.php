@@ -64,6 +64,36 @@ class MpesaService
         return $token;
     }
 
+    private function callbackUrl(): string
+    {
+        $url = (string) config('mpesa.callback_url');
+        $secret = (string) (config('mpesa.callback_secret') ?? '');
+        if ($secret === '') {
+            return $url;
+        }
+
+        $parsed = parse_url($url);
+        $query = [];
+        if (isset($parsed['query']) && is_string($parsed['query'])) {
+            parse_str($parsed['query'], $query);
+        }
+        if (!isset($query['secret'])) {
+            $query['secret'] = $secret;
+        }
+
+        $rebuilt = $url;
+        $qs = http_build_query($query);
+        if (isset($parsed['scheme'], $parsed['host'])) {
+            $path = $parsed['path'] ?? '';
+            $port = isset($parsed['port']) ? ':' . $parsed['port'] : '';
+            $rebuilt = $parsed['scheme'] . '://' . $parsed['host'] . $port . $path . ($qs ? '?' . $qs : '');
+        } else {
+            $rebuilt = preg_replace('/\?.*$/', '', $url) . ($qs ? '?' . $qs : '');
+        }
+
+        return $rebuilt;
+    }
+
     public function stkPush(array $payload): array
     {
         if (!$this->isConfigured()) {
@@ -86,7 +116,7 @@ class MpesaService
             'PartyA' => $payload['phone'],
             'PartyB' => $shortcode,
             'PhoneNumber' => $payload['phone'],
-            'CallBackURL' => (string) config('mpesa.callback_url'),
+            'CallBackURL' => $this->callbackUrl(),
             'AccountReference' => (string) ($payload['account_reference'] ?? config('mpesa.account_reference')),
             'TransactionDesc' => (string) ($payload['transaction_desc'] ?? config('mpesa.transaction_desc')),
         ];
@@ -107,4 +137,3 @@ class MpesaService
         ];
     }
 }
-

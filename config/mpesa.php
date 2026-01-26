@@ -12,8 +12,8 @@ return [
     'passkey' => env('MPESA_PASSKEY'),
 
     'callback_url' => env('MPESA_CALLBACK_URL'),
+    'callback_secret' => env('MPESA_CALLBACK_SECRET'),
 
     'account_reference' => env('MPESA_ACCOUNT_REFERENCE', 'Oriflame Coast'),
     'transaction_desc' => env('MPESA_TRANSACTION_DESC', 'Order payment'),
 ];
-
